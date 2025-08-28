@@ -1,0 +1,2078 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Office Invaders — Pixel Shield</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;height:100%;background:#070b14;color:#d8e4ff;font-family:'Kanit',sans-serif}
+  #wrap{display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px}
+  canvas{background:#0c1220;border:2px solid #1f2a44;border-radius:10px;max-width:95vw;height:auto;touch-action:manipulation}
+  .hud{display:flex;gap:16px;align-items:center;flex-wrap:wrap;justify-content:center}
+  .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.85);z-index:20}
+  .panel{background:#101826;border:1px solid #2a3a5f;border-radius:12px;padding:24px 28px;min-width:280px;max-width:90vw;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+  .panel button{font-size:16px;padding:10px 16px;border-radius:10px;border:1px solid #2a3a5f;background:#13213a;color:#e6edf3;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="hud">
+    <div id="lives">แพชชั่น: 3</div>
+    <div id="score">KPI: 0</div>
+    <div id="round">เงินเดือน: 15,000</div>
+  </div>
+  <canvas id="game" width="560" height="720"></canvas>
+  <div class="hud" style="opacity:.8">← → เคลื่อนที่ | Space ยิง | P หยุด | R เริ่มใหม่</div>
+
+  <!-- Start screen -->
+  <div id="startScreen" class="overlay">
+    <div class="panel">
+      <div style="font-size:20px;line-height:1.4;margin-bottom:14px">
+        <b>กติกา</b><br>ทำงานให้เสร็จ ได้ขึ้นเงินเดือน!
+      </div>
+      <button id="startBtn">เริ่มเกม</button>
+    </div>
+  </div>
+
+  <!-- Interstitial -->
+  <div id="interstitial" class="overlay" style="display:none;background:rgba(0,0,0,.78);z-index:10;">
+    <div class="panel">
+      <div style="font-size:20px;line-height:1.4;margin-bottom:14px">ยินดีด้วยคุณได้เลื่อนตำแหน่ง!</div>
+      <button id="continueBtn">ทำงานต่อ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const cvs=document.getElementById('game'), ctx=cvs.getContext('2d');
+  const W=cvs.width,H=cvs.height;
+  const scoreEl=document.getElementById('score'), livesEl=document.getElementById('lives'), roundEl=document.getElementById('round');
+  const startScreen=document.getElementById('startScreen'), startBtn=document.getElementById('startBtn');
+  const interstitial=document.getElementById('interstitial'), continueBtn=document.getElementById('continueBtn');
+
+  const keys={}; addEventListener('keydown',e=>{ keys[e.key]=true; if(['ArrowLeft','ArrowRight',' ','Spacebar'].includes(e.key)) e.preventDefault();});
+  addEventListener('keyup',e=> keys[e.key]=false);
+  const pressed=k=>!!keys[k];
+
+  const COLORS=['#ff6b6b','#ffd166','#7ee787'];
+  const FONT_SIZE=25, FONT=`bold ${FONT_SIZE}px 'Kanit',sans-serif`;
+  const player={x:W/2,y:H-60,w:44,h:24,speed:330,cool:0,lives:3};
+  let score=0, round=1, salary=15000, paused=true, gameOver=false, waitingNext=false, gameStarted=false;
+  let bullets=[],enemyBullets=[],aliens=[],eDir=1,eSpeed=18,dropY=22;
+  let shields=[];
+
+  // Player pixel art
+  const playerPixelData = {
+  "w": 15,
+  "h": 15,
+  "pixels": [
+    {
+      "x": 5,
+      "y": 3,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 3,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 3,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 3,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 3,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 3,
+      "c": "#228be6"
+    },
+    {
+      "x": 11,
+      "y": 3,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 11,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 12,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 5,
+      "c": "#ffffff"
+    },
+    {
+      "x": 6,
+      "y": 5,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 11,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 12,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 2,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 5,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 6,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 8,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 9,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 10,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 11,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 12,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 13,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 2,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 3,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 4,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 5,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 6,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 7,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 8,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 9,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 10,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 11,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 12,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 13,
+      "y": 7,
+      "c": "#000000"
+    },
+    {
+      "x": 2,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 8,
+      "c": "#000000"
+    },
+    {
+      "x": 4,
+      "y": 8,
+      "c": "#ffffff"
+    },
+    {
+      "x": 5,
+      "y": 8,
+      "c": "#000000"
+    },
+    {
+      "x": 6,
+      "y": 8,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 8,
+      "c": "#ffffff"
+    },
+    {
+      "x": 8,
+      "y": 8,
+      "c": "#000000"
+    },
+    {
+      "x": 9,
+      "y": 8,
+      "c": "#ffffff"
+    },
+    {
+      "x": 10,
+      "y": 8,
+      "c": "#000000"
+    },
+    {
+      "x": 11,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 12,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 13,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 14,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 2,
+      "y": 9,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 9,
+      "c": "#000000"
+    },
+    {
+      "x": 4,
+      "y": 9,
+      "c": "#000000"
+    },
+    {
+      "x": 5,
+      "y": 9,
+      "c": "#000000"
+    },
+    {
+      "x": 6,
+      "y": 9,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 9,
+      "c": "#ffffff"
+    },
+    {
+      "x": 8,
+      "y": 9,
+      "c": "#000000"
+    },
+    {
+      "x": 9,
+      "y": 9,
+      "c": "#000000"
+    },
+    {
+      "x": 10,
+      "y": 9,
+      "c": "#000000"
+    },
+    {
+      "x": 11,
+      "y": 9,
+      "c": "#ffffff"
+    },
+    {
+      "x": 12,
+      "y": 9,
+      "c": "#228be6"
+    },
+    {
+      "x": 13,
+      "y": 9,
+      "c": "#228be6"
+    },
+    {
+      "x": 14,
+      "y": 9,
+      "c": "#228be6"
+    },
+    {
+      "x": 2,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 10,
+      "c": "#ffffff"
+    },
+    {
+      "x": 4,
+      "y": 10,
+      "c": "#ffffff"
+    },
+    {
+      "x": 5,
+      "y": 10,
+      "c": "#ffffff"
+    },
+    {
+      "x": 6,
+      "y": 10,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 10,
+      "c": "#ffffff"
+    },
+    {
+      "x": 8,
+      "y": 10,
+      "c": "#ffffff"
+    },
+    {
+      "x": 9,
+      "y": 10,
+      "c": "#ffffff"
+    },
+    {
+      "x": 10,
+      "y": 10,
+      "c": "#ffffff"
+    },
+    {
+      "x": 11,
+      "y": 10,
+      "c": "#ffffff"
+    },
+    {
+      "x": 12,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 13,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 14,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 2,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 11,
+      "c": "#ffffff"
+    },
+    {
+      "x": 5,
+      "y": 11,
+      "c": "#ffffff"
+    },
+    {
+      "x": 6,
+      "y": 11,
+      "c": "#000000"
+    },
+    {
+      "x": 7,
+      "y": 11,
+      "c": "#000000"
+    },
+    {
+      "x": 8,
+      "y": 11,
+      "c": "#ffffff"
+    },
+    {
+      "x": 9,
+      "y": 11,
+      "c": "#ffffff"
+    },
+    {
+      "x": 10,
+      "y": 11,
+      "c": "#ffffff"
+    },
+    {
+      "x": 11,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 12,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 13,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 14,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 12,
+      "c": "#ffffff"
+    },
+    {
+      "x": 6,
+      "y": 12,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 12,
+      "c": "#ffffff"
+    },
+    {
+      "x": 8,
+      "y": 12,
+      "c": "#ffffff"
+    },
+    {
+      "x": 9,
+      "y": 12,
+      "c": "#ffffff"
+    },
+    {
+      "x": 10,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 11,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 12,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 13,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 14,
+      "y": 12,
+      "c": "#228be6"
+    }
+  ]
+};
+const PLAYER_SCALE = 4;
+  // apply to player box
+  player.w = playerPixelData.w * PLAYER_SCALE;
+  player.h = playerPixelData.h * PLAYER_SCALE;
+
+
+  const aabb=(a,b)=>a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+
+  function measureAlien(){
+    ctx.font=FONT;
+    const m=ctx.measureText('งาน');
+    const asc=m.actualBoundingBoxAscent??FONT_SIZE*0.8;
+    const des=m.actualBoundingBoxDescent??FONT_SIZE*0.2;
+    return {w:m.width,h:asc+des,ascent:asc};
+  }
+  // Freeze text metrics to avoid baseline jitter
+  const ALIEN_METRICS = measureAlien();
+  const ALIEN_ASCENT = ALIEN_METRICS.ascent;
+  const ALIEN_HEIGHT = ALIEN_METRICS.h;
+
+  function enemyMetrics(a){
+    ctx.font=FONT;
+    const stages=[ ['งาน'], ['งาน','มีแก้'], ['งาน','แก้นิด'] ];
+    const total=a.maxHp||1, hp=(typeof a.hp==='number')?a.hp:total;
+    const idx=Math.max(0,Math.min((stages[a.typeIdx]||['งาน']).length-1,total-hp));
+    const txt=(stages[a.typeIdx]||['งาน'])[idx]||'งาน';
+    const m=ctx.measureText(txt);
+    return {text:txt, w:m.width, h:ALIEN_HEIGHT, ascent:ALIEN_ASCENT};
+  }
+
+  function spawnAliens(){
+    aliens=[]; eDir=1; eSpeed=18+(round-1)*6;
+    const size=measureAlien(); const total=12+(round-1)*6; const gapX=24,gapY=28;
+    let cols=Math.max(2,Math.ceil(Math.sqrt(total))), rows=Math.max(2,Math.ceil(total/cols));
+    const totalW=cols*size.w+(cols-1)*gapX; const startX=Math.max(16,(W-totalW)/2), startY=90;
+    for(let i=0;i<total;i++){
+      const r=Math.floor(i/cols), c=i%cols, typeIdx=c%3, color=COLORS[typeIdx], maxHp=(typeIdx===0?1:2);
+      aliens.push({x:startX+c*(size.w+gapX), y:startY+r*(size.h+gapY), w:size.w,h:size.h,color,typeIdx,hp:maxHp,maxHp,alive:true});
+    }
+  }
+
+  function fire(){ if(player.cool<=0&&!paused&&!gameOver&&bullets.length<1){ bullets.push({x:player.x-2,y:player.y-18,w:4,h:14,v:-580}); player.cool=0.22; } }
+
+  function enemyFire(){
+    const buckets=new Map();
+    for(const a of aliens){ if(!a.alive) continue; const col=Math.floor(a.x/60); const prev=buckets.get(col); if(!prev||prev.y<a.y) buckets.set(col,a); }
+    const shooters=[...buckets.values()]; if(!shooters.length) return;
+    const shots=Math.min(1+Math.floor(round/2),3);
+    for(let i=0;i<shots;i++){
+      const s=shooters[Math.floor(Math.random()*shooters.length)], label='เสร็จรึยัง!';
+      ctx.font="bold 14px 'Kanit',sans-serif"; const tw=ctx.measureText(label).width, padX=8,padY=6;
+      const bw=Math.round(tw+padX*2), bh=Math.round(14+padY*2);
+      enemyBullets.push({x:s.x+s.w/2-bw/2, y:s.y+6, w:bw, h:bh, v:160+Math.random()*80, baseX:s.x+s.w/2-bw/2, age:0, phase:Math.random()*6.283185307179586, oscAmp:28, oscSpeed:2.6, label});
+    }
+  }
+
+  // Pixel art shield from your JSON
+  const shieldPixelData1 = {
+  "w": 15,
+  "h": 15,
+  "pixels": [
+    {
+      "x": 4,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 5,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 6,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 8,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 9,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 12,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 13,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 4,
+      "y": 4,
+      "c": "#ffffff"
+    },
+    {
+      "x": 5,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 4,
+      "c": "#ffffff"
+    },
+    {
+      "x": 12,
+      "y": 4,
+      "c": "#ffffff"
+    },
+    {
+      "x": 13,
+      "y": 4,
+      "c": "#ffffff"
+    },
+    {
+      "x": 4,
+      "y": 5,
+      "c": "#ffffff"
+    },
+    {
+      "x": 5,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 5,
+      "c": "#ffffff"
+    },
+    {
+      "x": 12,
+      "y": 5,
+      "c": "#ffffff"
+    },
+    {
+      "x": 13,
+      "y": 5,
+      "c": "#ffffff"
+    },
+    {
+      "x": 4,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 5,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 6,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 8,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 9,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 12,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 13,
+      "y": 6,
+      "c": "#ffffff"
+    },
+    {
+      "x": 1,
+      "y": 7,
+      "c": "#ffffff"
+    },
+    {
+      "x": 6,
+      "y": 7,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 7,
+      "c": "#ffffff"
+    },
+    {
+      "x": 12,
+      "y": 7,
+      "c": "#ffffff"
+    },
+    {
+      "x": 13,
+      "y": 7,
+      "c": "#ffffff"
+    },
+    {
+      "x": 0,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 1,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 2,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 3,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 4,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 5,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 6,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 7,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 8,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 9,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 10,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 11,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 12,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 13,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 14,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 0,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 1,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 2,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 3,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 4,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 5,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 6,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 7,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 8,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 9,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 10,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 11,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 12,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 13,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 14,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 0,
+      "y": 10,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 14,
+      "y": 10,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 0,
+      "y": 11,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 14,
+      "y": 11,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 0,
+      "y": 12,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 14,
+      "y": 12,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 0,
+      "y": 13,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 14,
+      "y": 13,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 0,
+      "y": 14,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 14,
+      "y": 14,
+      "c": "#ffd43b"
+    }
+  ]
+};
+const shieldPixelData2 = {
+  "w": 15,
+  "h": 15,
+  "pixels": [
+    {
+      "x": 9,
+      "y": 1,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 1,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 2,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 2,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 3,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 3,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 4,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 5,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 6,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 8,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 9,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 9,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 9,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 9,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 9,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 9,
+      "y": 9,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 10,
+      "y": 9,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 13,
+      "y": 11,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 12,
+      "y": 12,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 11,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 3,
+      "y": 14,
+      "c": "#228be6"
+    },
+    {
+      "x": 4,
+      "y": 14,
+      "c": "#228be6"
+    },
+    {
+      "x": 5,
+      "y": 14,
+      "c": "#228be6"
+    },
+    {
+      "x": 6,
+      "y": 14,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 14,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 14,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 14,
+      "c": "#228be6"
+    },
+    {
+      "x": 10,
+      "y": 14,
+      "c": "#228be6"
+    }
+  ]
+};
+const shieldPixelData3 = {
+  "w": 15,
+  "h": 15,
+  "pixels": [
+    {
+      "x": 7,
+      "y": 0,
+      "c": "#2f9e44"
+    },
+    {
+      "x": 8,
+      "y": 1,
+      "c": "#2f9e44"
+    },
+    {
+      "x": 7,
+      "y": 2,
+      "c": "#2f9e44"
+    },
+    {
+      "x": 5,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 6,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 8,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 9,
+      "y": 3,
+      "c": "#ffffff"
+    },
+    {
+      "x": 6,
+      "y": 4,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 4,
+      "c": "#ffffff"
+    },
+    {
+      "x": 8,
+      "y": 4,
+      "c": "#ffffff"
+    },
+    {
+      "x": 6,
+      "y": 5,
+      "c": "#ffffff"
+    },
+    {
+      "x": 7,
+      "y": 5,
+      "c": "#ffffff"
+    },
+    {
+      "x": 8,
+      "y": 5,
+      "c": "#ffffff"
+    },
+    {
+      "x": 4,
+      "y": 6,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 5,
+      "y": 6,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 6,
+      "y": 6,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 7,
+      "y": 6,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 8,
+      "y": 6,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 9,
+      "y": 6,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 10,
+      "y": 6,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 4,
+      "y": 7,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 5,
+      "y": 7,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 6,
+      "y": 7,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 7,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 7,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 7,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 10,
+      "y": 7,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 4,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 5,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 6,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 7,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 8,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 9,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 10,
+      "y": 8,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 4,
+      "y": 9,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 5,
+      "y": 9,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 6,
+      "y": 9,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 7,
+      "y": 9,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 8,
+      "y": 9,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 9,
+      "y": 9,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 10,
+      "y": 9,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 4,
+      "y": 10,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 5,
+      "y": 10,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 6,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 10,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 10,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 10,
+      "y": 10,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 4,
+      "y": 11,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 5,
+      "y": 11,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 6,
+      "y": 11,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 7,
+      "y": 11,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 8,
+      "y": 11,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 9,
+      "y": 11,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 10,
+      "y": 11,
+      "c": "#ffa94d"
+    },
+    {
+      "x": 4,
+      "y": 12,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 5,
+      "y": 12,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 6,
+      "y": 12,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 7,
+      "y": 12,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 8,
+      "y": 12,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 9,
+      "y": 12,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 10,
+      "y": 12,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 4,
+      "y": 13,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 5,
+      "y": 13,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 6,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 7,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 8,
+      "y": 13,
+      "c": "#228be6"
+    },
+    {
+      "x": 9,
+      "y": 13,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 10,
+      "y": 13,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 4,
+      "y": 14,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 5,
+      "y": 14,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 6,
+      "y": 14,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 7,
+      "y": 14,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 8,
+      "y": 14,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 9,
+      "y": 14,
+      "c": "#ffd43b"
+    },
+    {
+      "x": 10,
+      "y": 14,
+      "c": "#ffd43b"
+    }
+  ]
+};
+
+  function buildShield(x0, y0, scale=6, pixelData) {
+    x0 = Math.round(x0);
+    y0 = Math.round(y0);
+
+    const blocks=[];
+    for (const p of pixelData.pixels) {
+      blocks.push({
+        x: x0 + p.x*scale,
+        y: y0 + p.y*scale,
+        w: scale,
+        h: scale,
+        hp: 3,
+        color: p.c
+      });
+    }
+    return blocks;
+  }
+
+  function spawnShieldsFromPixel(){
+    shields=[];
+    const baseY = H - 190;
+    const scale = 6;
+    const gap = (W - (shieldPixelData1.w*scale + shieldPixelData2.w*scale + shieldPixelData3.w*scale))/4;
+    let x = gap;
+    shields.push(buildShield(Math.round(x), baseY, scale, shieldPixelData1));
+    x += shieldPixelData1.w*scale + gap;
+    shields.push(buildShield(Math.round(x), baseY, scale, shieldPixelData2));
+    x += shieldPixelData2.w*scale + gap;
+    shields.push(buildShield(Math.round(x), baseY, scale, shieldPixelData3));
+  }
+
+  function drawShieldBlocks(blocks){
+    ctx.save();
+    for(const b of blocks){
+      if(b.hp<=0) continue;
+      const a=b.hp===3?1:(b.hp===2?0.75:0.55);
+      ctx.fillStyle=b.color;
+      ctx.globalAlpha=a;
+      ctx.fillRect(b.x,b.y,b.w,b.h);
+    }
+    ctx.restore();
+  }
+
+  const BALLOON_SPAWN_RATE = 1.0;  // balloons per second (reduced)
+function fireEnemyIfNeeded(dt){ if(Math.random() < BALLOON_SPAWN_RATE * dt) enemyFire(); }
+
+  function update(dt){
+    if(waitingNext||!gameStarted){ updateHUD(); return; }
+    const move=player.speed*dt;
+    if(pressed('ArrowLeft')||pressed('a')||pressed('A')) player.x-=move;
+    if(pressed('ArrowRight')||pressed('d')||pressed('D')) player.x+=move;
+    player.x=clamp(player.x,player.w/2,W-player.w/2);
+    player.cool=Math.max(0,player.cool-dt);
+    if(pressed(' ')||pressed('Spacebar')) fire();
+    bullets.forEach(b=>b.y+=b.v*dt); bullets=bullets.filter(b=>b.y>-80);
+    enemyBullets.forEach(b=>{
+      b.y += b.v*dt;
+      b.age = (b.age||0) + dt;
+      if (b.baseX === undefined) { b.baseX = b.x; if (!b.phase) b.phase = Math.random()*6.283185307179586; }
+      const amp = (b.oscAmp||28);
+      const speed = (b.oscSpeed||2.6);
+      b.x = b.baseX + amp * Math.sin(b.phase + b.age * speed);
+    });
+    enemyBullets = enemyBullets.filter(b=> b.y < H + 80);
+    // Bullet vs Balloon collision: remove both when hit
+    for (const b of bullets) {
+      for (const eb of enemyBullets) {
+        if (aabb(b, eb)) {
+          b.y = -999;          // remove player bullet
+          eb.y = H + 999;      // remove balloon
+          break;               // one bullet pops at most one balloon
+        }
+      }
+    }
+
+    // Player hit detection with enemy 'balloon' bullets
+    const pbox = { x: player.x - player.w/2, y: player.y - player.h, w: player.w, h: player.h };
+    for (const b of enemyBullets) {
+      if (aabb(b, pbox)) {
+        b.y = H + 999; // remove bullet
+        player.lives = Math.max(0, player.lives - 1);
+        if (player.lives <= 0) { paused = true; gameOver = true; }
+      }
+    }
+
+
+    const hitShield=(blocks,bullet)=>{ for(const bl of blocks){ if(bl.hp>0&&aabb(bullet,bl)){ bl.hp--; bullet.y=-999; return true; }} return false; };
+    for(const b of bullets){ for(const s of shields){ if(hitShield(s,b)) break; } }
+    const hitShieldArea=(blocks,bullet)=>{ let hit=false; for(const bl of blocks){ if(bl.hp>0&&aabb(bullet,bl)){ bl.hp=0; hit=true; }} return hit; };
+    for(const b of enemyBullets){ let destroyed=false; for(const s of shields){ if(hitShieldArea(s,b)) destroyed=true; } if(destroyed) b.y=H+999; }
+
+    const alive=aliens.filter(a=>a.alive);
+    if(alive.length){
+      const minX=Math.min(...alive.map(a=>a.x));
+      const maxX=Math.max(...alive.map(a=>a.x+enemyMetrics(a).w));
+      const needDrop=(minX<=12&&eDir<0)||(maxX>=W-12&&eDir>0);
+      const speedBoost=1+(1-alive.length/Math.max(1,aliens.length))*0.9+(round-1)*0.1;
+      const step=eSpeed*dt*speedBoost*eDir;
+      for(const a of alive)a.x+=step; if(needDrop){ for(const a of alive)a.y+=dropY; eDir*=-1; }
+    }
+
+    fireEnemyIfNeeded(dt);
+    for(const b of bullets){
+      for(const a of aliens){
+        if(!a.alive) continue;
+        const m=enemyMetrics(a), box={x:a.x,y:a.y,w:m.w,h:m.h};
+        if(aabb(b,box)){ b.y=-999; a.hp--; if(a.hp<=0){ a.alive=false; score+=10; } else score+=5; }
+      }
+    }
+    if(!aliens.some(a=>a.alive)) showInterstitial();
+    updateHUD();
+  }
+
+  
+  function drawPlayerFromPixels(){
+    const scale = PLAYER_SCALE;
+    const x0 = Math.round(player.x - player.w/2);
+    const y0 = Math.round(player.y - player.h);
+    for (const p of playerPixelData.pixels) {
+      if (!p || p.c === "#000000") continue; // treat pure black as transparent
+      ctx.fillStyle = p.c;
+      ctx.fillRect(x0 + p.x*scale, y0 + p.y*scale, scale, scale);
+    }
+  }
+
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#aaf0d1'; bullets.forEach(b=>ctx.fillRect(b.x,b.y,b.w,b.h));
+    enemyBullets.forEach(b=>{
+      const text=b.label||'เสร็จรึยัง!'; ctx.font="bold 14px 'Kanit',sans-serif";
+      const bw=b.w,bh=b.h,x=b.x,y=b.y,radius=8,tailW=10,tailH=8;
+      ctx.fillStyle='#ff4d4d';
+      ctx.beginPath();
+      ctx.moveTo(x+radius,y); ctx.lineTo(x+bw-radius,y); ctx.quadraticCurveTo(x+bw,y,x+bw,y+radius);
+      ctx.lineTo(x+bw,y+bh-radius); ctx.quadraticCurveTo(x+bw,y+bh,x+bw-radius,y+bh);
+      ctx.lineTo(x+radius,y+bh); ctx.quadraticCurveTo(x,y+bh,x,y+bh-radius);
+      ctx.lineTo(x,y+radius); ctx.quadraticCurveTo(x,y,x+radius,y); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); const tx=x+bw*0.5, ty=y; ctx.moveTo(tx-tailW/2,ty); ctx.lineTo(tx+tailW/2,ty); ctx.lineTo(tx,ty-tailH); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#fff'; ctx.textBaseline='middle'; const tw=ctx.measureText(text).width; ctx.fillText(text, x+(bw-tw)/2, y+bh/2);
+    });
+    shields.forEach(drawShieldBlocks);
+    for(const a of aliens){ if(!a.alive) continue; const m=enemyMetrics(a); ctx.fillStyle=COLORS[a.typeIdx]; ctx.font=FONT; ctx.textBaseline='alphabetic'; ctx.fillText(m.text, Math.round(a.x), Math.round(a.y + m.ascent)); }
+    drawPlayerFromPixels();
+  }
+
+  function updateHUD(){ scoreEl.textContent=`KPI: ${score}`; livesEl.textContent=`แพชชั่น: ${player.lives}`; roundEl.textContent=`เงินเดือน: ${salary.toLocaleString()}`; }
+  function showInterstitial(){ interstitial.style.display='flex'; waitingNext=true; }
+  function hideInterstitial(){ interstitial.style.display='none'; waitingNext=false; }
+  function continueNext(){ round++; salary=Math.round(salary*1.10); hideInterstitial(); spawnAliens(); spawnShieldsFromPixel(); updateHUD(); }
+  continueBtn.addEventListener('click', continueNext);
+
+  function startGame(){
+    if(gameStarted) return;
+    gameStarted=true; paused=false;
+    startScreen.style.display='none';
+    score=0; round=1; salary=15000; player.lives=3;
+    bullets.length=0; enemyBullets.length=0;
+    spawnAliens(); spawnShieldsFromPixel(); updateHUD();
+  }
+  startBtn.addEventListener('click', startGame);
+
+  addEventListener('keydown',e=>{
+    if(e.key==='p'||e.key==='P') paused=!paused;
+    if(waitingNext && (e.key==='Enter'||e.key===' ')) continueNext();
+    if(gameOver && (e.key==='r'||e.key==='R')){ startGame(); }
+  });
+
+  let last=performance.now();
+  function loop(now){ const dt=Math.min(0.033,(now-last)/1000); last=now; if(!paused) update(dt); render(); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
