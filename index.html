@@ -672,7 +672,7 @@ const PLAYER_SCALE = 4;
   }
 
   function spawnAliens(){
-    aliens=[]; eDir=1; eSpeed=18+(round-1)*6;
+    aliens=[]; eDir=1; eSpeed=36+(round-1)*9;
     const size=measureAlien(); const total=12+(round-1)*6; const gapX=24,gapY=28;
     let cols=Math.max(2,Math.ceil(Math.sqrt(total))), rows=Math.max(2,Math.ceil(total/cols));
     const totalW=cols*size.w+(cols-1)*gapX; const startX=Math.max(16,(W-totalW)/2), startY=90;
@@ -688,14 +688,13 @@ const PLAYER_SCALE = 4;
     const buckets=new Map();
     for(const a of aliens){ if(!a.alive) continue; const col=Math.floor(a.x/60); const prev=buckets.get(col); if(!prev||prev.y<a.y) buckets.set(col,a); }
     const shooters=[...buckets.values()]; if(!shooters.length) return;
-    const shots=Math.min(1+Math.floor(round/2),3);
-    for(let i=0;i<shots;i++){
-      const s=shooters[Math.floor(Math.random()*shooters.length)], label='เสร็จรึยัง!';
-      ctx.font="bold 14px 'Kanit',sans-serif"; const tw=ctx.measureText(label).width, padX=8,padY=6;
-      const bw=Math.round(tw+padX*2), bh=Math.round(14+padY*2);
-      enemyBullets.push({x:s.x+s.w/2-bw/2, y:s.y+6, w:bw, h:bh, v:160+Math.random()*80, baseX:s.x+s.w/2-bw/2, age:0, phase:Math.random()*6.283185307179586, oscAmp:28, oscSpeed:2.6, label});
-    }
-  }
+    const s=shooters[Math.floor(Math.random()*shooters.length)], label='เสร็จรึยัง!';
+  ctx.font="bold 14px 'Kanit',sans-serif"; const tw=ctx.measureText(label).width, padX=8,padY=6;
+  const bw=Math.round(tw+padX*2), bh=Math.round(14+padY*2);
+  enemyBullets.push({x:s.x+s.w/2-bw/2, y:s.y+6, w:bw, h:bh, v:160+Math.random()*80,
+    baseX:s.x+s.w/2-bw/2, age:0, phase:Math.random()*6.283185307179586,
+    oscAmp:28, oscSpeed:2.6, label});
+}
 
   // Pixel art shield from your JSON
   const shieldPixelData1 = {
@@ -1922,8 +1921,11 @@ const shieldPixelData3 = {
 
   function spawnShieldsFromPixel(){
     shields=[];
-    const baseY = H - 190;
     const scale = 6;
+    const shieldH = shieldPixelData1.h * scale; // 15 * 6 = 90
+    const clearance = 28; // gap between player head and shields
+    const baseY = Math.round(Math.max(140, (player.y - player.h - clearance - shieldH)));
+
     const gap = (W - (shieldPixelData1.w*scale + shieldPixelData2.w*scale + shieldPixelData3.w*scale))/4;
     let x = gap;
     shields.push(buildShield(Math.round(x), baseY, scale, shieldPixelData1));
@@ -1945,8 +1947,11 @@ const shieldPixelData3 = {
     ctx.restore();
   }
 
-  const BALLOON_SPAWN_RATE = 1.0;  // balloons per second (reduced)
-function fireEnemyIfNeeded(dt){ if(Math.random() < BALLOON_SPAWN_RATE * dt) enemyFire(); }
+  let enemyShotTimer = 0; // seconds since last balloon
+function fireEnemyIfNeeded(dt){
+  enemyShotTimer += dt;
+  if (enemyShotTimer >= 1.0) { enemyFire(); enemyShotTimer -= 1.0; }
+}
 
   function update(dt){
     if(waitingNext||!gameStarted){ updateHUD(); return; }
@@ -1998,7 +2003,7 @@ function fireEnemyIfNeeded(dt){ if(Math.random() < BALLOON_SPAWN_RATE * dt) enem
       const minX=Math.min(...alive.map(a=>a.x));
       const maxX=Math.max(...alive.map(a=>a.x+enemyMetrics(a).w));
       const needDrop=(minX<=12&&eDir<0)||(maxX>=W-12&&eDir>0);
-      const speedBoost=1+(1-alive.length/Math.max(1,aliens.length))*0.9+(round-1)*0.1;
+      const speedBoost=1+(1-alive.length/Math.max(1,aliens.length))*1.0+(round-1)*0.12;
       const step=eSpeed*dt*speedBoost*eDir;
       for(const a of alive)a.x+=step; if(needDrop){ for(const a of alive)a.y+=dropY; eDir*=-1; }
     }
@@ -2061,7 +2066,14 @@ function fireEnemyIfNeeded(dt){ if(Math.random() < BALLOON_SPAWN_RATE * dt) enem
     bullets.length=0; enemyBullets.length=0;
     spawnAliens(); spawnShieldsFromPixel(); updateHUD();
   }
-  startBtn.addEventListener('click', startGame);
+  
+  function restartGame(){
+    // Allow restart anytime
+    gameStarted=false; gameOver=false; waitingNext=false; paused=false;
+    bullets.length=0; enemyBullets.length=0;
+    startGame();
+  }
+startBtn.addEventListener('click', startGame);
 
   addEventListener('keydown',e=>{
     if(e.key==='p'||e.key==='P') paused=!paused;
